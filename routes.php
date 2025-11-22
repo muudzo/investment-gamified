@@ -51,3 +51,32 @@ class PortfolioController extends Controller
         ]);
     }
 }
+
+public function summary(Request $request)
+    {
+        $user = $request->user();
+        $portfolio = Portfolio::where('user_id', $user->id)->with('stock')->get();
+        
+        $totalValue = $portfolio->sum(function ($item) {
+            return $item->quantity * $item->stock->current_price;
+        });
+        
+        $totalInvested = $portfolio->sum(function ($item) {
+            return $item->quantity * $item->average_price;
+        });
+        
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'balance' => $user->balance,
+                'total_invested' => $totalInvested,
+                'total_value' => $totalValue,
+                'profit_loss' => $totalValue - $totalInvested,
+                'profit_loss_percentage' => $totalInvested > 0 ? (($totalValue - $totalInvested) / $totalInvested) * 100 : 0,
+                'level' => $user->level,
+                'experience_points' => $user->experience_points,
+                'next_level_xp' => $user->level * 1000,
+            ]
+        ]);
+    }
+
