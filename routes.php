@@ -79,4 +79,24 @@ public function summary(Request $request)
             ]
         ]);
     }
+//Handles buying a stock: validates input, checks balance, and prepares purchase for the authenticated user 
 
+    public function buyStock(Request $request)
+    {
+        $validated = $request->validate([
+            'stock_symbol' => 'required|exists:stocks,symbol',
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        $user = $request->user();
+        $stock = Stock::where('symbol', $validated['stock_symbol'])->first();
+        $totalCost = $stock->current_price * $validated['quantity'];
+
+        if ($user->balance < $totalCost) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient balance'
+            ], 400);
+        }
+
+        
