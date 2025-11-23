@@ -47,3 +47,20 @@ class StockController extends Controller
             ]
         ]);
     }
+
+     public function history($symbol, Request $request)
+    {
+        $stock = Stock::where('symbol', $symbol)->firstOrFail();
+        $days = $request->input('days', 30);
+
+        $history = StockHistory::where('stock_id', $stock->id)
+            ->where('date', '>=', now()->subDays($days))
+            ->orderBy('date', 'asc')
+            ->get(['date', 'close_price']);
+
+        return response()->json([
+            'success' => true,
+            'data' => $history
+        ]);
+    }
+}
