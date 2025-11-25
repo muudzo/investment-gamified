@@ -25,3 +25,23 @@ return new class extends Migration
         Schema::dropIfExists('achievement_user');
     }
 };
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('achievement_user', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('achievement_id')->constrained()->onDelete('cascade');
+            $table->timestamp('unlocked_at')->useCurrent();
+
+            $table->unique(['user_id', 'achievement_id']);
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('achievement_user');
+    }
+};
