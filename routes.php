@@ -4,7 +4,7 @@
 use App\Http\Controllers\Api\PortfolioController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\AchievementController;
-
+//protetcted endpoints (require authentication )
 Route::middleware('auth:sanctum')->group(function () {
     // Portfolio endpoints
     Route::get('/portfolio', [PortfolioController::class, 'index']);
