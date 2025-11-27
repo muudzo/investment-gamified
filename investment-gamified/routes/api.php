@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\PortfolioController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\AchievementController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ExternalStockController;
 
 // Public stock endpoints (no auth required)
 Route::get('/stocks', [StockController::class, 'index']);
@@ -31,3 +32,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/user', [AuthController::class, 'user']);
 });
+
+    // External/third-party stock API (AlphaVantage / FMP)
+    Route::prefix('external')->group(function () {
+        Route::get('/stocks/quote/{symbol}', [ExternalStockController::class, 'quote']);
+        Route::get('/stocks/history/{symbol}', [ExternalStockController::class, 'history']);
+        Route::get('/stocks/search', [ExternalStockController::class, 'search']);
+        Route::get('/stocks/profile/{symbol}', [ExternalStockController::class, 'profile']);
+    });
