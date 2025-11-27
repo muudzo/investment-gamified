@@ -74,3 +74,60 @@ How to extend:
 3. Keep route definitions in `routes.php` (or `routes/api.php` if you prefer) and point them to controller classes.
 
 If you want, I can continue: extract more logic into services, add a repository layer, and add unit tests for services. ✅
+
+## API testing — quick start (auth + third-party stock APIs) 🔧
+
+1. Make sure you configured your API keys in `.env`:
+
+	 - ALPHAVANTAGE_API_KEY=your_alpha_vantage_key
+	 - FMP_API_KEY=your_fmp_key
+
+2. Start the app locally (example):
+
+```bash
+php artisan serve
+```
+
+3. Test auth endpoints (register/login/logout):
+
+Register:
+```bash
+curl -s -X POST http://localhost:8000/api/auth/register \
+	-H 'Content-Type: application/json' \
+	-d '{ "name": "Test User", "email": "test@example.com", "password": "password123", "password_confirmation": "password123" }'
+```
+
+Login:
+```bash
+curl -s -X POST http://localhost:8000/api/auth/login \
+	-H 'Content-Type: application/json' \
+	-d '{ "email": "test@example.com", "password": "password123" }'
+```
+
+Use the returned token with the `Authorization: Bearer <token>` header for protected routes.
+
+4. Test external third-party stock endpoints (AlphaVantage / FMP):
+
+Get a quote (FMP):
+```bash
+curl -s "http://localhost:8000/api/external/stocks/quote/AAPL?source=fmp"
+```
+
+Get a quote (AlphaVantage):
+```bash
+curl -s "http://localhost:8000/api/external/stocks/quote/AAPL?source=alphavantage"
+```
+
+Search (must include query):
+```bash
+curl -s "http://localhost:8000/api/external/stocks/search?q=apple&source=alphavantage"
+```
+
+Get company profile (FMP only):
+```bash
+curl -s "http://localhost:8000/api/external/stocks/profile/AAPL"
+```
+
+Notes:
+- The endpoints return 502 status if the provider fails to return data (e.g., rate limits). Check your keys and the provider quotas.
+- The console commands `php artisan stocks:update-prices` and `php artisan stocks:import-history` are also available — be careful with rate limits.
