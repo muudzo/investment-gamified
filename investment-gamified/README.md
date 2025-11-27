@@ -57,3 +57,20 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+---
+
+## Modular refactor (recent changes)
+
+I've started a modular refactor to make the codebase easier to maintain and extend:
+
+- Controllers have been moved out of top-level files and into proper controller classes under `app/Http/Controllers/Api`.
+- Business logic has been extracted into services under `app/Services` (e.g. `PortfolioService`) so controllers remain thin and easier to test.
+
+How to extend:
+
+1. Add or extend controllers in `app/Http/Controllers/Api`.
+2. Move complex business logic into `app/Services` and inject the service into controllers via constructor injection.
+3. Keep route definitions in `routes.php` (or `routes/api.php` if you prefer) and point them to controller classes.
+
+If you want, I can continue: extract more logic into services, add a repository layer, and add unit tests for services. ✅

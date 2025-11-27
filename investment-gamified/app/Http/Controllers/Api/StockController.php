@@ -1,4 +1,8 @@
 <?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
 use App\Models\Stock;
 use App\Models\StockHistory;
 use Illuminate\Http\Request;
@@ -29,7 +33,7 @@ class StockController extends Controller
         ]);
     }
 
-     public function show($symbol)
+    public function show($symbol)
     {
         $stock = Stock::where('symbol', $symbol)->firstOrFail();
 
@@ -48,7 +52,7 @@ class StockController extends Controller
         ]);
     }
 
-     public function history($symbol, Request $request)
+    public function history($symbol, Request $request)
     {
         $stock = Stock::where('symbol', $symbol)->firstOrFail();
         $days = $request->input('days', 30);
@@ -61,59 +65,6 @@ class StockController extends Controller
         return response()->json([
             'success' => true,
             'data' => $history
-        ]);
-    }
-}
-
-//app/Http/controllers/Api/achievementController.php
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;    
-use Illuminate\Http\Request;
-use App\Models\Achievement;
-use App\Models\User;
-
-class AchievementController extends Controller 
-{
-    public function index(Request $request)
-    {
-        $user = $request->user();
-        $achievements = Achievement::all();
-        
-        $userAchievements = $user->achievements->pluck('id')->toArray();
-
-        return response()->json([
-            'success' => true,
-            'data' => $achievements->map(function ($achievement) use ($userAchievements) {
-                return [
-                    'id' => $achievement->id,
-                    'name' => $achievement->name,
-                    'description' => $achievement->description,
-                    'icon' => $achievement->icon,
-                    'xp_reward' => $achievement->xp_reward,
-                    'unlocked' => in_array($achievement->id, $userAchievements),
-                ];
-            })
-        ]);
-    }
-
-    public function leaderboard()
-    {
-        $topUsers = User::orderBy('level', 'desc')
-            ->orderBy('experience_points', 'desc')
-            ->limit(10)
-            ->get(['id', 'name', 'level', 'experience_points']);
-
-        return response()->json([
-            'success' => true,
-            'data' => $topUsers->map(function ($user, $index) {
-                return [
-                    'rank' => $index + 1,
-                    'name' => $user->name,
-                    'level' => $user->level,
-                    'experience_points' => $user->experience_points,
-                ];
-            })
         ]);
     }
 }
