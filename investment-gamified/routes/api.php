@@ -4,11 +4,16 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\PortfolioController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\AchievementController;
+use App\Http\Controllers\Api\AuthController;
 
 // Public stock endpoints (no auth required)
 Route::get('/stocks', [StockController::class, 'index']);
 Route::get('/stocks/{symbol}', [StockController::class, 'show']);
 Route::get('/stocks/{symbol}/history', [StockController::class, 'history']);
+
+// Authentication routes
+Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/login', [AuthController::class, 'login']);
 
 // Protected endpoints (require authentication)
 Route::middleware('auth:sanctum')->group(function () {
@@ -21,4 +26,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Gamification endpoints
     Route::get('/achievements', [AchievementController::class, 'index']);
     Route::get('/leaderboard', [AchievementController::class, 'leaderboard']);
+
+    // Authenticated user endpoints
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/auth/user', [AuthController::class, 'user']);
 });
