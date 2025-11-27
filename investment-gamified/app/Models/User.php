@@ -68,13 +68,11 @@ class Stock extends Model
         'current_price',
         'change_percentage',
         'logo_url',
-        'available',
     ];
 
     protected $casts = [
         'current_price' => 'decimal:2',
         'change_percentage' => 'decimal:2',
-        'available' => 'integer',
     ];
 
     public function portfolios()

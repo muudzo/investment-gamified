@@ -21,10 +21,5 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
-
-        // Seed popular and/or live stocks. This will call FMP and upsert stocks.
-        if (class_exists(\Database\Seeders\FmpStocksSeeder::class)) {
-            $this->call(\Database\Seeders\FmpStocksSeeder::class);
-        }
     }
 }
