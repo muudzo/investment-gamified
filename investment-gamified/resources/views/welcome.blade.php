@@ -202,8 +202,8 @@
 				if (data.success) {
 					document.getElementById('userName').textContent = 'Trader';
 					document.getElementById('userLevel').textContent = data.data.level;
-					document.getElementById('userBalance').textContent = data.data.balance.toFixed(2);
-					document.getElementById('portfolioValue').textContent = data.data.total_value.toFixed(2);
+					document.getElementById('userBalance').textContent = parseFloat(data.data.balance).toFixed(2);
+					document.getElementById('portfolioValue').textContent = parseFloat(data.data.total_value).toFixed(2);
 					document.getElementById('userXP').textContent = data.data.experience_points;
 				}
 			} catch (error) {
@@ -278,7 +278,7 @@
 									<p class="text-xs text-gray-600">${item.quantity} shares</p>
 								</div>
 								<p class="text-sm font-bold ${item.profit_loss >= 0 ? 'text-green-600' : 'text-red-600'}">
-									${item.profit_loss >= 0 ? '+' : ''}$${item.profit_loss.toFixed(2)}
+									${item.profit_loss >= 0 ? '+' : ''}$${parseFloat(item.profit_loss).toFixed(2)}
 								</p>
 							</div>
 						</div>
