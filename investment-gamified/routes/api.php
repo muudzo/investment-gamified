@@ -13,9 +13,6 @@ Route::get('/stocks/{symbol}', [StockController::class, 'show']);
 Route::get('/stocks/{symbol}/history', [StockController::class, 'history']);
 
 // Authentication routes
-// Backwards-compatible aliases used by the frontend app
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 
