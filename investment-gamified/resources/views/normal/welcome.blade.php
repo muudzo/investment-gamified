@@ -44,9 +44,14 @@
 							<h2 class="text-2xl font-bold text-gray-800">Welcome, <span id="userName"></span>!</h2>
 							<p class="text-gray-600">Level <span id="userLevel"></span> Trader</p>
 						</div>
-						<button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
-							Logout
-						</button>
+						<div class="flex gap-3 items-center">
+							<a href="{{ url('/toggle-ui') }}" class="text-sm text-purple-600 hover:text-purple-700 underline">
+								Switch to Senior Mode
+							</a>
+							<button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
+								Logout
+							</button>
+						</div>
 					</div>
                     
 					<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
