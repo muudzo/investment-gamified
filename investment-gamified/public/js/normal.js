@@ -37,6 +37,13 @@ async function showDashboard() {
     await loadStocks();
     await loadPortfolio();
     await loadAchievements();
+
+    // Poll for updates every 3 seconds
+    setInterval(async () => {
+        await loadStocks();
+        await loadPortfolio();
+        await loadUserData(); // Also update user data to reflect portfolio value changes
+    }, 3000);
 }
 
 async function loadUserData() {
