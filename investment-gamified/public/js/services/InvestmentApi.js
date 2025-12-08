@@ -62,6 +62,32 @@ class InvestmentApi {
     }
 
     /**
+     * Register new user
+     */
+    async register(name, email, password, passwordConfirmation) {
+        try {
+            const response = await fetch(`${this.baseUrl}/auth/register`, {
+                method: 'POST',
+                headers: this.getHeaders(false),
+                body: JSON.stringify({
+                    name,
+                    email,
+                    password,
+                    password_confirmation: passwordConfirmation
+                })
+            });
+            const data = await response.json();
+            if (data.success) {
+                this.setToken(data.token);
+            }
+            return data;
+        } catch (error) {
+            console.error('Registration error:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
      * Get user portfolio summary
      */
     async getSummary() {

@@ -17,16 +17,92 @@ async function login() {
     }
 }
 
+// Register
+async function register() {
+    const name = document.getElementById('registerName').value;
+    const email = document.getElementById('registerEmail').value;
+    const password = document.getElementById('registerPassword').value;
+    const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+
+    // Client-side validation
+    if (!name || !email || !password || !passwordConfirm) {
+        showError('Please fill in all fields');
+        return;
+    }
+
+    if (password.length < 8) {
+        showError('Password must be at least 8 characters');
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        showError('Passwords do not match');
+        return;
+    }
+
+    const data = await api.register(name, email, password, passwordConfirm);
+
+    if (data.success) {
+        showSuccess('Account created successfully! Logging you in...');
+        setTimeout(() => showDashboard(), 1500);
+    } else {
+        // Handle Laravel validation errors
+        if (data.errors) {
+            const errorMessages = Object.values(data.errors).flat().join(', ');
+            showError(errorMessages);
+        } else {
+            showError(data.message || 'Registration failed');
+        }
+    }
+}
+
+// Toggle between login and register forms
+function toggleAuthMode() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    loginForm.classList.toggle('hidden');
+    registerForm.classList.toggle('hidden');
+
+    // Clear error/success messages
+    hideMessages();
+}
+
 function showError(message) {
-    const errorDiv = document.getElementById('loginError');
+    const errorDiv = document.getElementById('authError');
+    const successDiv = document.getElementById('authSuccess');
     errorDiv.textContent = message;
     errorDiv.classList.remove('hidden');
+    successDiv.classList.add('hidden');
+}
+
+function showSuccess(message) {
+    const errorDiv = document.getElementById('authError');
+    const successDiv = document.getElementById('authSuccess');
+    successDiv.textContent = message;
+    successDiv.classList.remove('hidden');
+    errorDiv.classList.add('hidden');
+}
+
+function hideMessages() {
+    document.getElementById('authError').classList.add('hidden');
+    document.getElementById('authSuccess').classList.add('hidden');
+}
+
+function hideMessages() {
+    document.getElementById('authError').classList.add('hidden');
+    document.getElementById('authSuccess').classList.add('hidden');
 }
 
 function logout() {
     api.clearToken();
     document.getElementById('loginScreen').classList.remove('hidden');
     document.getElementById('dashboardScreen').classList.add('hidden');
+
+    // Clear forms
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    hideMessages();
 }
 
 async function showDashboard() {
@@ -50,7 +126,7 @@ async function loadUserData() {
     const data = await api.getSummary();
 
     if (data.success) {
-        document.getElementById('userName').textContent = 'Trader';
+        document.getElementById('userName').textContent = data.data.name || 'Trader';
         document.getElementById('userLevel').textContent = data.data.level;
         document.getElementById('userBalance').textContent = parseFloat(data.data.balance).toFixed(2);
         document.getElementById('portfolioValue').textContent = parseFloat(data.data.total_value).toFixed(2);
@@ -200,6 +276,8 @@ window.onload = () => {
 
 // Expose functions to global scope for HTML onclick handlers
 window.login = login;
+window.register = register;
+window.toggleAuthMode = toggleAuthMode;
 window.logout = logout;
 window.openTradeModal = openTradeModal;
 window.closeTradeModal = closeTradeModal;

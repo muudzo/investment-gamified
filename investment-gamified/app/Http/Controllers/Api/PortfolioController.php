@@ -55,6 +55,7 @@ class PortfolioController extends Controller
         return response()->json([
             'success' => true,
             'data' => [
+                'name' => $user->name,
                 'balance' => $user->balance,
                 'total_invested' => $totalInvested,
                 'total_value' => $totalValue,

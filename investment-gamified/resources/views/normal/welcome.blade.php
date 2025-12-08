@@ -16,6 +16,7 @@
 				<h1 class="text-3xl font-bold text-center mb-2 text-purple-600">🎮 Investment Game</h1>
 				<p class="text-gray-600 text-center mb-6">Learn to invest with fun!</p>
                 
+				<!-- Login Form -->
 				<div id="loginForm">
 					<input type="email" id="loginEmail" placeholder="Email" 
 						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
@@ -26,11 +27,37 @@
 						Login
 					</button>
 					<p class="text-center mt-4 text-sm text-gray-600">
-						Test account: test@example.com / password
+						Don't have an account? 
+						<button onclick="toggleAuthMode()" class="text-purple-600 font-semibold hover:underline">
+							Create Account
+						</button>
+					</p>
+				</div>
+
+				<!-- Registration Form -->
+				<div id="registerForm" class="hidden">
+					<input type="text" id="registerName" placeholder="Full Name" 
+						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+					<input type="email" id="registerEmail" placeholder="Email" 
+						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+					<input type="password" id="registerPassword" placeholder="Password (min 8 characters)" 
+						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+					<input type="password" id="registerPasswordConfirm" placeholder="Confirm Password" 
+						   class="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+					<button onclick="register()" 
+							class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition">
+						Create Account
+					</button>
+					<p class="text-center mt-4 text-sm text-gray-600">
+						Already have an account? 
+						<button onclick="toggleAuthMode()" class="text-purple-600 font-semibold hover:underline">
+							Login
+						</button>
 					</p>
 				</div>
                 
-				<div id="loginError" class="mt-4 p-3 bg-red-100 text-red-700 rounded-lg hidden"></div>
+				<div id="authError" class="mt-4 p-3 bg-red-100 text-red-700 rounded-lg hidden"></div>
+				<div id="authSuccess" class="mt-4 p-3 bg-green-100 text-green-700 rounded-lg hidden"></div>
 			</div>
 		</div>
 
