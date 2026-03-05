@@ -1,10 +1,11 @@
 <?php
 
 return [
-    'starting_balance' => 10000.00,
+    'starting_balance' => env('GAME_STARTING_BALANCE', 10000.00),
+
     'xp' => [
-        'buy_stock' => 10,
-        'sell_stock' => 15,
-        'level_up_multiplier' => 1000,
+        'buy_reward'         => env('XP_BUY_REWARD', 10),
+        'sell_reward'        => env('XP_SELL_REWARD', 15),
+        'level_up_base'      => env('LEVEL_BASE_XP', 1000),
     ],
 ];

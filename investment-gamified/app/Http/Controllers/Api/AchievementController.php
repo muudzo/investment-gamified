@@ -93,12 +93,7 @@ class AchievementController extends Controller
                     'experience_points' => $user['experience_points'],
                 ];
             }),
-            'meta' => [
-                'current_page' => $paginator->currentPage(),
-                'per_page' => $paginator->perPage(),
-                'last_page' => $paginator->lastPage(),
-                'total' => $paginator->total(),
-            ],
+            'meta' => $this->paginationMeta($paginator),
         ]);
     }
 }

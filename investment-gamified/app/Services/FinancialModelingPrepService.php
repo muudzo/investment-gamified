@@ -10,17 +10,19 @@ use Illuminate\Support\Facades\Log;
 use App\Services\CircuitBreaker;
 use App\Services\ApiQuotaTracker;
 
-class FinancialModelingPrepService
+class FinancialModelingPrepService implements ExternalStockProvider
 {
     private const BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
     private string $apiKey;
+    private CircuitBreaker $circuit;
+    private ApiQuotaTracker $quota;
 
     public function __construct()
     {
-        $this->apiKey = config('services.fmp.key');
+        $this->apiKey  = config('services.fmp.key');
         $this->circuit = new CircuitBreaker('fmp');
-        $this->quota = new ApiQuotaTracker();
+        $this->quota   = new ApiQuotaTracker();
     }
 
     public function getQuote(string $symbol): ?array
@@ -39,7 +41,7 @@ class FinancialModelingPrepService
             $this->quota->recordRequest('fmp');
 
             return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($symbol) {
-                $response = Http::timeout(10)->get("{$this->baseUrl}/quote/{$symbol}", [
+                $response = Http::timeout(10)->get(self::BASE_URL . "/quote/{$symbol}", [
                     'apikey' => $this->apiKey,
                 ]);
 

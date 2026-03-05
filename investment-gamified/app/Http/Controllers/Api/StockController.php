@@ -44,13 +44,8 @@ class StockController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $stocks->items(),
-            'meta' => [
-                'current_page' => $stocks->currentPage(),
-                'per_page' => $stocks->perPage(),
-                'last_page' => $stocks->lastPage(),
-                'total' => $stocks->total(),
-            ],
+            'data'    => $stocks->items(),
+            'meta'    => $this->paginationMeta($stocks),
         ]);
     }
 

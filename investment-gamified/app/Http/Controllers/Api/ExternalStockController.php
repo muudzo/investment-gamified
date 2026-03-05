@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\FinancialModelingPrepService;
 use App\Models\Stock;
-use Illuminate\Support\Facades\Log;
+use App\Services\ExternalStockProvider;
+use App\Services\FinancialModelingPrepService;
+use App\Services\StockApiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ExternalStockController extends Controller
@@ -25,22 +27,16 @@ class ExternalStockController extends Controller
     {
         $symbol = strtoupper(trim($symbol));
 
-        // Validate symbol format early
-        if (! preg_match('/^[A-Z0-9\.\-]{1,8}$/', $symbol)) {
+        if (!preg_match('/^[A-Z0-9.\-]{1,8}$/', $symbol)) {
             return response()->json(['success' => false, 'message' => 'Invalid stock symbol format'], 422);
         }
 
-        // Ensure symbol exists in our stocks table to prevent abuse
-        if (! Stock::where('symbol', $symbol)->exists()) {
+        if (!Stock::where('symbol', $symbol)->exists()) {
             return response()->json(['success' => false, 'message' => 'Symbol not available for trading'], 404);
         }
 
-        $source = strtolower($request->query('source', 'alphavantage'));
-
         try {
-            $data = $source === 'fmp'
-                ? $this->fmpService->getQuote($symbol)
-                : $this->alphaService->getQuote($symbol);
+            $data = $this->resolveProvider($request)->getQuote($symbol);
         } catch (\Exception $e) {
             return $this->externalApiErrorResponse($e->getMessage());
         }
@@ -53,13 +49,10 @@ class ExternalStockController extends Controller
      */
     public function history(Request $request, string $symbol): JsonResponse
     {
-        $source = $this->resolveSource($request);
         $days = (int) $request->query('days', 30);
 
         try {
-            $data = $source === 'fmp'
-                ? $this->fmpService->getHistoricalPrices($symbol, $days)
-                : $this->alphaService->getHistoricalData($symbol, 'compact');
+            $data = $this->resolveProvider($request)->getHistoricalPrices($symbol, $days);
         } catch (\Exception $e) {
             return $this->externalApiErrorResponse($e->getMessage());
         }
@@ -77,12 +70,8 @@ class ExternalStockController extends Controller
             return response()->json(['success' => false, 'message' => 'Query parameter "q" is required'], 422);
         }
 
-        $source = $this->resolveSource($request);
-
         try {
-            $data = $source === 'fmp'
-                ? $this->fmpService->searchStocks($query)
-                : $this->alphaService->searchStocks($query);
+            $data = $this->resolveProvider($request)->searchStocks($query);
         } catch (\Exception $e) {
             return $this->externalApiErrorResponse($e->getMessage());
         }
@@ -104,9 +93,11 @@ class ExternalStockController extends Controller
         return $this->providerDataResponse($data, 'No profile data available');
     }
 
-    private function resolveSource(Request $request): string
+    private function resolveProvider(Request $request): ExternalStockProvider
     {
-        return strtolower((string) $request->query('source', 'alphavantage'));
+        return strtolower((string) $request->query('source', 'alphavantage')) === 'fmp'
+            ? $this->fmpService
+            : $this->alphaService;
     }
 
     private function externalApiErrorResponse(string $error): JsonResponse

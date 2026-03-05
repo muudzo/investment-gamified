@@ -6,7 +6,7 @@ namespace App\Http\Requests\Portfolio;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class SellStockRequest extends FormRequest
+class TradeStockRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -17,7 +17,7 @@ class SellStockRequest extends FormRequest
     {
         return [
             'stock_symbol' => 'required|exists:stocks,symbol',
-            'quantity' => 'required|integer|min:1',
+            'quantity'     => 'required|integer|min:1',
         ];
     }
 }
