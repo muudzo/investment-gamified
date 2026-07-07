@@ -177,13 +177,43 @@ class InvestmentApi {
     }
 
     /**
-     * Internal trade method
+     * Get paginated leaderboard rankings.
+     */
+    async getLeaderboard(page = 1, perPage = 10) {
+        try {
+            const response = await fetch(`${this.baseUrl}/leaderboard?page=${page}&per_page=${perPage}`, {
+                headers: this.getHeaders()
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching leaderboard:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Generate a unique Idempotency-Key for a trade request. The backend requires
+     * this header on buy/sell so a retried POST can never execute twice; each
+     * distinct user-initiated trade gets its own key.
+     */
+    _idempotencyKey() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        return `idem-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    /**
+     * Internal trade method. Sends an Idempotency-Key so retries are safe.
      */
     async _trade(type, symbol, quantity) {
         try {
+            const headers = this.getHeaders();
+            headers['Idempotency-Key'] = this._idempotencyKey();
+
             const response = await fetch(`${this.baseUrl}/portfolio/${type}`, {
                 method: 'POST',
-                headers: this.getHeaders(),
+                headers,
                 body: JSON.stringify({
                     stock_symbol: symbol,
                     quantity: parseInt(quantity)

@@ -1,392 +1,351 @@
-// Initialize API
-const api = new InvestmentApi(document.querySelector('meta[name="app-url"]').content + '/api');
+// Investment Game — "Arcade Bank" kids experience.
+// All dynamic values are written via textContent (never innerHTML) and all
+// handlers are attached with addEventListener, so the strict script-src CSP
+// (no 'unsafe-inline') is satisfied and there is no XSS surface.
+
+const appUrl = document.querySelector('meta[name="app-url"]').content;
+const api = new InvestmentApi(appUrl + '/api');
+
 let currentStock = null;
 let tradeType = null;
+let pollTimer = null;
 
-// Login
+const $ = (id) => document.getElementById(id);
+
+/* ---------------- Smooth experience switch ---------------- */
+document.querySelectorAll('[data-switch]').forEach((link) => {
+	link.addEventListener('click', (e) => {
+		e.preventDefault();
+		const app = $('app');
+		app.classList.add('page-leaving');
+		setTimeout(() => { window.location.href = link.href; }, 240);
+	});
+});
+
+/* ---------------- Auth ---------------- */
 async function login() {
-    const email = document.getElementById('loginEmail').value;
-    const password = document.getElementById('loginPassword').value;
-
-    const data = await api.login(email, password);
-
-    if (data.success) {
-        showDashboard();
-    } else {
-        showError(data.message || 'Login failed');
-    }
+	const email = $('loginEmail').value;
+	const password = $('loginPassword').value;
+	const data = await api.login(email, password);
+	if (data.success) { showDashboard(); }
+	else { showError(data.message || 'Login failed'); }
 }
 
-// Register
 async function register() {
-    const name = document.getElementById('registerName').value;
-    const email = document.getElementById('registerEmail').value;
-    const password = document.getElementById('registerPassword').value;
-    const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+	const name = $('registerName').value;
+	const email = $('registerEmail').value;
+	const password = $('registerPassword').value;
+	const passwordConfirm = $('registerPasswordConfirm').value;
 
-    // Client-side validation
-    if (!name || !email || !password || !passwordConfirm) {
-        showError('Please fill in all fields');
-        return;
-    }
+	if (!name || !email || !password || !passwordConfirm) { return showError('Please fill in all fields'); }
+	if (password.length < 8) { return showError('Password must be at least 8 characters'); }
+	if (password !== passwordConfirm) { return showError('Passwords do not match'); }
 
-    if (password.length < 8) {
-        showError('Password must be at least 8 characters');
-        return;
-    }
-
-    if (password !== passwordConfirm) {
-        showError('Passwords do not match');
-        return;
-    }
-
-    const data = await api.register(name, email, password, passwordConfirm);
-
-    if (data.success) {
-        showSuccess('Account created successfully! Logging you in...');
-        setTimeout(() => showDashboard(), 1500);
-    } else {
-        // Handle Laravel validation errors
-        if (data.errors) {
-            const errorMessages = Object.values(data.errors).flat().join(', ');
-            showError(errorMessages);
-        } else {
-            showError(data.message || 'Registration failed');
-        }
-    }
+	const data = await api.register(name, email, password, passwordConfirm);
+	if (data.success) {
+		showSuccess('Account created! Loading your game...');
+		setTimeout(() => showDashboard(), 1200);
+	} else if (data.errors) {
+		showError(Object.values(data.errors).flat().join(', '));
+	} else {
+		showError(data.message || 'Registration failed');
+	}
 }
 
-// Toggle between login and register forms
 function toggleAuthMode() {
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-
-    loginForm.classList.toggle('hidden');
-    registerForm.classList.toggle('hidden');
-
-    // Clear error/success messages
-    hideMessages();
+	$('loginForm').classList.toggle('hidden');
+	$('registerForm').classList.toggle('hidden');
+	hideMessages();
 }
 
 function showError(message) {
-    const errorDiv = document.getElementById('authError');
-    const successDiv = document.getElementById('authSuccess');
-    errorDiv.textContent = message;
-    errorDiv.classList.remove('hidden');
-    successDiv.classList.add('hidden');
+	$('authError').textContent = message;
+	$('authError').classList.remove('hidden');
+	$('authSuccess').classList.add('hidden');
 }
-
 function showSuccess(message) {
-    const errorDiv = document.getElementById('authError');
-    const successDiv = document.getElementById('authSuccess');
-    successDiv.textContent = message;
-    successDiv.classList.remove('hidden');
-    errorDiv.classList.add('hidden');
+	$('authSuccess').textContent = message;
+	$('authSuccess').classList.remove('hidden');
+	$('authError').classList.add('hidden');
 }
-
 function hideMessages() {
-    document.getElementById('authError').classList.add('hidden');
-    document.getElementById('authSuccess').classList.add('hidden');
+	$('authError').classList.add('hidden');
+	$('authSuccess').classList.add('hidden');
 }
 
 function logout() {
-    api.clearToken();
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('dashboardScreen').classList.add('hidden');
-
-    // Clear forms
-    document.getElementById('loginEmail').value = '';
-    document.getElementById('loginPassword').value = '';
-    hideMessages();
+	api.clearToken();
+	if (pollTimer) clearInterval(pollTimer);
+	$('dashboardScreen').classList.add('hidden');
+	$('loginScreen').classList.remove('hidden');
+	$('loginEmail').value = '';
+	$('loginPassword').value = '';
+	hideMessages();
 }
 
+/* ---------------- Dashboard ---------------- */
 async function showDashboard() {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('dashboardScreen').classList.remove('hidden');
+	$('loginScreen').classList.add('hidden');
+	$('dashboardScreen').classList.remove('hidden');
 
-    await loadUserData();
-    await loadStocks();
-    await loadPortfolio();
-    await loadAchievements();
+	await Promise.all([loadUserData(), loadStocks(), loadPortfolio(), loadAchievements()]);
 
-    // Poll for updates every 3 seconds
-    setInterval(async () => {
-        await loadStocks();
-        await loadPortfolio();
-        await loadUserData(); // Also update user data to reflect portfolio value changes
-    }, 3000);
+	if (pollTimer) clearInterval(pollTimer);
+	pollTimer = setInterval(() => {
+		loadStocks();
+		loadPortfolio();
+		loadUserData();
+	}, 4000);
 }
 
 async function loadUserData() {
-    const data = await api.getSummary();
+	const data = await api.getSummary();
+	if (!data.success) return;
+	const d = data.data;
 
-    if (data.success) {
-        document.getElementById('userName').textContent = data.data.name || 'Trader';
-        document.getElementById('userLevel').textContent = data.data.level;
-        document.getElementById('userBalance').textContent = parseFloat(data.data.balance).toFixed(2);
-        document.getElementById('portfolioValue').textContent = parseFloat(data.data.total_value).toFixed(2);
-        document.getElementById('userXP').textContent = data.data.experience_points;
-    }
+	$('userName').textContent = d.name || 'friend';
+	$('userLevel').textContent = d.level;
+	$('userBalance').textContent = parseFloat(d.balance).toFixed(2);
+	$('portfolioValue').textContent = parseFloat(d.total_value).toFixed(2);
+	$('userXP').textContent = d.experience_points;
+
+	const next = d.next_level_xp || (d.level * 1000);
+	const pct = Math.max(0, Math.min(100, (d.experience_points / next) * 100));
+	$('xpFill').style.width = pct + '%';
+	$('xpMeta').textContent = `${d.experience_points} / ${next} XP`;
 }
 
-// Build a single stock card as real DOM nodes so that any attacker-controlled
-// field coming back from the stocks API (name, description, fun_fact, etc.)
-// is only ever assigned via textContent and can never be parsed as markup.
 function createStockCard(stock) {
-    const card = document.createElement('div');
-    card.className = 'border rounded-xl p-4 hover:shadow-md transition';
+	const card = document.createElement('div');
+	card.className = 'stock';
 
-    const header = document.createElement('div');
-    header.className = 'flex justify-between items-start mb-2';
+	const head = document.createElement('div');
+	head.className = 'stock__head';
 
-    const left = document.createElement('div');
-    const symbolEl = document.createElement('h4');
-    symbolEl.className = 'font-bold text-lg';
-    symbolEl.textContent = stock.symbol;
+	const left = document.createElement('div');
+	const sym = document.createElement('div');
+	sym.className = 'stock__sym';
+	sym.textContent = stock.symbol;
+	const name = document.createElement('div');
+	name.className = 'stock__name';
+	name.textContent = stock.name;
+	left.append(sym, name);
 
-    const nameEl = document.createElement('p');
-    nameEl.className = 'text-sm text-gray-600';
-    nameEl.textContent = stock.name;
+	const right = document.createElement('div');
+	const price = document.createElement('div');
+	price.className = 'stock__price';
+	price.textContent = `$${stock.current_price}`;
+	const up = Number(stock.change_percentage) >= 0;
+	const chip = document.createElement('div');
+	chip.className = `chip ${up ? 'chip--up' : 'chip--down'}`;
+	chip.textContent = `${up ? '▲' : '▼'} ${Math.abs(Number(stock.change_percentage)).toFixed(2)}%`;
+	right.append(price, chip);
 
-    left.appendChild(symbolEl);
-    left.appendChild(nameEl);
+	head.append(left, right);
+	card.appendChild(head);
 
-    const right = document.createElement('div');
-    right.className = 'text-right';
+	const desc = document.createElement('p');
+	desc.className = 'stock__desc';
+	desc.textContent = stock.kid_friendly_description || stock.description || '';
+	card.appendChild(desc);
 
-    const priceEl = document.createElement('p');
-    priceEl.className = 'font-bold text-xl';
-    priceEl.textContent = `$${stock.current_price}`;
+	if (stock.fun_fact) {
+		const fact = document.createElement('p');
+		fact.className = 'stock__fact';
+		fact.textContent = `💡 ${stock.fun_fact}`;
+		card.appendChild(fact);
+	}
 
-    const isPositive = stock.change_percentage >= 0;
-    const changeEl = document.createElement('p');
-    changeEl.className = `text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`;
-    changeEl.textContent = `${isPositive ? '+' : ''}${stock.change_percentage}%`;
+	const actions = document.createElement('div');
+	actions.className = 'stock__actions';
+	const buy = document.createElement('button');
+	buy.className = 'pill pill--buy';
+	buy.textContent = 'Buy';
+	buy.addEventListener('click', () => openTradeModal(stock.symbol, 'buy'));
+	const sell = document.createElement('button');
+	sell.className = 'pill pill--sell';
+	sell.textContent = 'Sell';
+	sell.addEventListener('click', () => openTradeModal(stock.symbol, 'sell'));
+	actions.append(buy, sell);
+	card.appendChild(actions);
 
-    right.appendChild(priceEl);
-    right.appendChild(changeEl);
-
-    header.appendChild(left);
-    header.appendChild(right);
-    card.appendChild(header);
-
-    const descEl = document.createElement('p');
-    descEl.className = 'text-sm text-gray-600 mb-3';
-    descEl.textContent = stock.kid_friendly_description || stock.description || '';
-    card.appendChild(descEl);
-
-    if (stock.fun_fact) {
-        const funFactEl = document.createElement('p');
-        funFactEl.className = 'text-xs text-purple-600 mb-3';
-        funFactEl.textContent = `💡 ${stock.fun_fact}`;
-        card.appendChild(funFactEl);
-    }
-
-    const btnRow = document.createElement('div');
-    btnRow.className = 'flex gap-2';
-
-    const buyBtn = document.createElement('button');
-    buyBtn.className = 'flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 font-semibold';
-    buyBtn.textContent = 'Buy';
-    buyBtn.addEventListener('click', () => openTradeModal(stock.symbol, 'buy'));
-
-    const sellBtn = document.createElement('button');
-    sellBtn.className = 'flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 font-semibold';
-    sellBtn.textContent = 'Sell';
-    sellBtn.addEventListener('click', () => openTradeModal(stock.symbol, 'sell'));
-
-    btnRow.appendChild(buyBtn);
-    btnRow.appendChild(sellBtn);
-    card.appendChild(btnRow);
-
-    return card;
+	return card;
 }
 
 async function loadStocks() {
-    const data = await api.getStocks();
-    const stocksList = document.getElementById('stocksList');
-
-    // Clear previous content without ever touching innerHTML
-    stocksList.textContent = '';
-
-    if (!data.success) {
-        console.error('Failed to load stocks:', data.message);
-        const errEl = document.createElement('p');
-        errEl.className = 'text-red-500';
-        errEl.textContent = 'Failed to load stocks. Please refresh.';
-        stocksList.appendChild(errEl);
-        return;
-    }
-
-    data.data.forEach(stock => {
-        stocksList.appendChild(createStockCard(stock));
-    });
+	const data = await api.getStocks();
+	const list = $('stocksList');
+	list.textContent = '';
+	if (!data.success) {
+		const err = document.createElement('p');
+		err.className = 'empty';
+		err.textContent = 'Could not load stocks. Please refresh.';
+		list.appendChild(err);
+		return;
+	}
+	data.data.forEach((stock) => list.appendChild(createStockCard(stock)));
 }
 
-function createPortfolioItem(item) {
-    const wrap = document.createElement('div');
-    wrap.className = 'border rounded-lg p-3';
+function createHolding(item) {
+	const wrap = document.createElement('div');
+	wrap.className = 'holding';
 
-    const row = document.createElement('div');
-    row.className = 'flex justify-between items-center';
+	const left = document.createElement('div');
+	const sym = document.createElement('div');
+	sym.className = 'holding__sym';
+	sym.textContent = item.stock_symbol;
+	const qty = document.createElement('div');
+	qty.className = 'holding__qty';
+	qty.textContent = `${item.quantity} shares`;
+	left.append(sym, qty);
 
-    const left = document.createElement('div');
-    const symbolEl = document.createElement('p');
-    symbolEl.className = 'font-semibold';
-    symbolEl.textContent = item.stock_symbol;
+	const up = Number(item.profit_loss) >= 0;
+	const pl = document.createElement('div');
+	pl.className = `pl ${up ? 'pl--up' : 'pl--down'}`;
+	pl.textContent = `${up ? '+' : ''}$${parseFloat(item.profit_loss).toFixed(2)}`;
 
-    const qtyEl = document.createElement('p');
-    qtyEl.className = 'text-xs text-gray-600';
-    qtyEl.textContent = `${item.quantity} shares`;
-
-    left.appendChild(symbolEl);
-    left.appendChild(qtyEl);
-
-    const isPositive = item.profit_loss >= 0;
-    const plEl = document.createElement('p');
-    plEl.className = `text-sm font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`;
-    plEl.textContent = `${isPositive ? '+' : ''}$${parseFloat(item.profit_loss).toFixed(2)}`;
-
-    row.appendChild(left);
-    row.appendChild(plEl);
-    wrap.appendChild(row);
-
-    return wrap;
+	wrap.append(left, pl);
+	return wrap;
 }
 
 async function loadPortfolio() {
-    const data = await api.getPortfolio();
-    const portfolioList = document.getElementById('portfolioList');
-
-    portfolioList.textContent = '';
-
-    if (!data.success || data.data.length === 0) {
-        const emptyEl = document.createElement('p');
-        emptyEl.className = 'text-gray-500 text-sm';
-        emptyEl.textContent = 'No stocks yet. Start trading!';
-        portfolioList.appendChild(emptyEl);
-        return;
-    }
-
-    data.data.forEach(item => {
-        portfolioList.appendChild(createPortfolioItem(item));
-    });
+	const data = await api.getPortfolio();
+	const list = $('portfolioList');
+	list.textContent = '';
+	if (!data.success || data.data.length === 0) {
+		const empty = document.createElement('p');
+		empty.className = 'empty';
+		empty.textContent = 'No stocks yet. Buy your first one!';
+		list.appendChild(empty);
+		return;
+	}
+	data.data.forEach((item) => list.appendChild(createHolding(item)));
 }
 
-function createAchievementItem(achievement) {
-    const wrap = document.createElement('div');
-    wrap.className = `flex items-center gap-3 p-2 rounded-lg ${achievement.unlocked ? 'bg-yellow-50' : 'bg-gray-50'}`;
+function createSticker(a) {
+	const wrap = document.createElement('div');
+	wrap.className = `sticker ${a.unlocked ? '' : 'sticker--locked'}`;
 
-    const iconEl = document.createElement('span');
-    iconEl.className = `text-2xl ${achievement.unlocked ? '' : 'grayscale opacity-50'}`;
-    iconEl.textContent = achievement.icon;
+	const icon = document.createElement('div');
+	icon.className = 'sticker__icon';
+	icon.textContent = a.icon;
 
-    const textWrap = document.createElement('div');
-    textWrap.className = 'flex-1';
+	const body = document.createElement('div');
+	body.className = 'sticker__body';
+	const name = document.createElement('div');
+	name.className = 'sticker__name';
+	name.textContent = a.name;
+	const xp = document.createElement('div');
+	xp.className = 'sticker__xp';
+	xp.textContent = `${a.xp_reward} XP`;
+	body.append(name, xp);
 
-    const nameEl = document.createElement('p');
-    nameEl.className = 'text-sm font-semibold';
-    nameEl.textContent = achievement.name;
-
-    const xpEl = document.createElement('p');
-    xpEl.className = 'text-xs text-gray-600';
-    xpEl.textContent = `${achievement.xp_reward} XP`;
-
-    textWrap.appendChild(nameEl);
-    textWrap.appendChild(xpEl);
-
-    wrap.appendChild(iconEl);
-    wrap.appendChild(textWrap);
-
-    if (achievement.unlocked) {
-        const checkEl = document.createElement('span');
-        checkEl.className = 'text-xs text-green-600 font-bold';
-        checkEl.textContent = '✓';
-        wrap.appendChild(checkEl);
-    }
-
-    return wrap;
+	wrap.append(icon, body);
+	if (a.unlocked) {
+		const check = document.createElement('div');
+		check.className = 'sticker__check';
+		check.textContent = '✓';
+		wrap.appendChild(check);
+	}
+	return wrap;
 }
 
 async function loadAchievements() {
-    const data = await api.getAchievements();
-
-    if (!data.success) {
-        console.error('Failed to load achievements:', data.message);
-        return;
-    }
-
-    const achievementsList = document.getElementById('achievementsList');
-    achievementsList.textContent = '';
-
-    data.data.forEach(achievement => {
-        achievementsList.appendChild(createAchievementItem(achievement));
-    });
+	const data = await api.getAchievements();
+	if (!data.success) return;
+	const list = $('achievementsList');
+	list.textContent = '';
+	data.data.forEach((a) => list.appendChild(createSticker(a)));
 }
 
+/* ---------------- Trade modal ---------------- */
 async function openTradeModal(symbol, type) {
-    const data = await api.getStock(symbol);
-    currentStock = data.data;
-    tradeType = type;
+	const data = await api.getStock(symbol);
+	currentStock = data.data;
+	tradeType = type;
 
-    document.getElementById('modalTitle').textContent =
-        `${type === 'buy' ? 'Buy' : 'Sell'} ${currentStock.symbol}`;
-    document.getElementById('modalDescription').textContent = currentStock.kid_friendly_description;
-    document.getElementById('tradeQuantity').value = 1;
-    updateTotalCost();
-
-    document.getElementById('tradeModal').classList.remove('hidden');
-
-    document.getElementById('confirmTradeBtn').onclick = confirmTrade;
+	$('modalTitle').textContent = `${type === 'buy' ? 'Buy' : 'Sell'} ${currentStock.symbol}`;
+	$('modalSub').textContent = currentStock.kid_friendly_description || currentStock.name || '';
+	$('tradeQuantity').value = 1;
+	updateTotalCost();
+	$('confirmTradeBtn').className = type === 'buy' ? 'btn btn--play' : 'btn btn--danger';
+	$('confirmTradeBtn').textContent = type === 'buy' ? 'Buy now' : 'Sell now';
+	$('tradeModal').classList.remove('hidden');
 }
 
 function updateTotalCost() {
-    const quantity = parseInt(document.getElementById('tradeQuantity').value) || 1;
-    const total = currentStock.current_price * quantity;
-    document.getElementById('totalCost').textContent = `$${total.toFixed(2)}`;
+	const qty = Math.max(1, parseInt($('tradeQuantity').value) || 1);
+	$('totalCost').textContent = `$${(currentStock.current_price * qty).toFixed(2)}`;
 }
 
-document.getElementById('tradeQuantity').addEventListener('input', updateTotalCost);
+function stepQty(delta) {
+	const input = $('tradeQuantity');
+	input.value = Math.max(1, (parseInt(input.value) || 1) + delta);
+	updateTotalCost();
+}
 
 async function confirmTrade() {
-    const quantity = parseInt(document.getElementById('tradeQuantity').value);
+	const quantity = Math.max(1, parseInt($('tradeQuantity').value) || 1);
+	const data = tradeType === 'buy'
+		? await api.buyStock(currentStock.symbol, quantity)
+		: await api.sellStock(currentStock.symbol, quantity);
 
-    let data;
-    if (tradeType === 'buy') {
-        data = await api.buyStock(currentStock.symbol, quantity);
-    } else {
-        data = await api.sellStock(currentStock.symbol, quantity);
-    }
-
-    if (data.success) {
-        closeTradeModal();
-        await loadUserData();
-        await loadPortfolio();
-        await loadAchievements();
-        alert(`${tradeType === 'buy' ? 'Bought' : 'Sold'} successfully! +${data.data.xp_earned} XP`);
-    } else {
-        alert(data.message || 'Trade failed');
-    }
+	if (data.success) {
+		closeTradeModal();
+		coinBurst();
+		const xp = data.data && data.data.xp_earned ? ` +${data.data.xp_earned} XP` : '';
+		toast(`${tradeType === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${currentStock.symbol}!${xp}`, 'win');
+		await Promise.all([loadUserData(), loadPortfolio(), loadAchievements()]);
+	} else {
+		toast(data.message || 'Trade failed', 'err');
+	}
 }
 
-function closeTradeModal() {
-    document.getElementById('tradeModal').classList.add('hidden');
+function closeTradeModal() { $('tradeModal').classList.add('hidden'); }
+
+/* ---------------- Celebration ---------------- */
+function coinBurst() {
+	const layer = $('coinLayer');
+	const coins = ['🪙', '💰', '⭐', '🎉'];
+	for (let i = 0; i < 14; i++) {
+		const coin = document.createElement('div');
+		coin.className = 'coin';
+		coin.textContent = coins[i % coins.length];
+		coin.style.left = (40 + Math.random() * 20) + 'vw';
+		coin.style.top = (55 + Math.random() * 10) + 'vh';
+		coin.style.animationDelay = (Math.random() * 0.25) + 's';
+		layer.appendChild(coin);
+		setTimeout(() => coin.remove(), 1300);
+	}
 }
 
-// Wire up controls that used to rely on inline onclick="" attributes in the
-// blade view. Inline event handler attributes are blocked by a strict
-// script-src CSP (no 'unsafe-inline'), so every handler is attached here
-// instead via addEventListener.
-document.getElementById('loginBtn').addEventListener('click', login);
-document.getElementById('showRegisterBtn').addEventListener('click', toggleAuthMode);
-document.getElementById('registerBtn').addEventListener('click', register);
-document.getElementById('showLoginBtn').addEventListener('click', toggleAuthMode);
-document.getElementById('logoutBtn').addEventListener('click', logout);
-document.getElementById('cancelTradeBtn').addEventListener('click', closeTradeModal);
+let toastTimer = null;
+function toast(message, kind) {
+	document.querySelectorAll('.toast').forEach((t) => t.remove());
+	const el = document.createElement('div');
+	el.className = `toast ${kind === 'win' ? 'toast--win' : kind === 'err' ? 'toast--err' : ''}`;
+	el.textContent = message;
+	document.body.appendChild(el);
+	if (toastTimer) clearTimeout(toastTimer);
+	toastTimer = setTimeout(() => el.remove(), 2600);
+}
 
-// Check for existing token on load
-window.onload = () => {
-    if (api.token) {
-        showDashboard();
-    }
-};
+/* ---------------- Wire controls ---------------- */
+$('loginBtn').addEventListener('click', login);
+$('showRegisterBtn').addEventListener('click', toggleAuthMode);
+$('registerBtn').addEventListener('click', register);
+$('showLoginBtn').addEventListener('click', toggleAuthMode);
+$('logoutBtn').addEventListener('click', logout);
+$('cancelTradeBtn').addEventListener('click', closeTradeModal);
+$('confirmTradeBtn').addEventListener('click', confirmTrade);
+$('qtyMinus').addEventListener('click', () => stepQty(-1));
+$('qtyPlus').addEventListener('click', () => stepQty(1));
+$('tradeQuantity').addEventListener('input', updateTotalCost);
+
+// Submit auth forms on Enter for a snappier feel.
+['loginPassword', 'registerPasswordConfirm'].forEach((id) => {
+	const el = $(id);
+	if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') (id === 'loginPassword' ? login() : register()); });
+});
+
+window.addEventListener('load', () => { if (api.token) showDashboard(); });

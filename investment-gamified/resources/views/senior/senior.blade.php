@@ -3,132 +3,111 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Senior Mode — Investment App</title>
-  {{-- Allow JS to read the app URL for API calls --}}
+  <title>Investment — Pro Trading</title>
   <meta name="app-url" content="{{ url('/') }}">
   <link rel="stylesheet" href="{{ asset('css/senior.css') }}">
 </head>
 <body>
-  <main id="senior-ui" aria-live="polite">
 
-    <header class="card" role="banner" aria-label="Senior mode header">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <h1>Your Money at a Glance</h1>
-          <p>Protected & Trackable — simplified for confidence</p>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;margin-bottom:8px">Easy View Mode</div>
-          <label style="display:inline-flex;align-items:center;gap:8px;background:#fff;padding:8px;border-radius:999px;border:1px solid #eee;">
-            <input id="senior-toggle" type="checkbox" checked aria-label="Toggle Senior Mode"/>
-            <span style="font-weight:700">ON</span>
-          </label>
-          <div style="margin-top:8px">
-            <a href="{{ url('/toggle-ui') }}" style="font-size:14px;color:var(--accent);text-decoration:underline">Switch to Normal View</a>
+  <!-- ============ Auth ============ -->
+  <section id="authScreen" class="auth page-fade">
+    <div class="auth__card">
+      <div class="auth__brand">
+        <span class="logomark">I</span>
+        <b>Investment</b>
+        <span class="tag">PRO · LIVE</span>
+      </div>
+      <h1 class="auth__title">Sign in to trade</h1>
+      <p class="auth__sub">The real trading desk. Positions, order entry, live P/L.</p>
+
+      <div id="loginBox">
+        <div class="field"><label for="liEmail">Email</label><input id="liEmail" type="email" autocomplete="email"></div>
+        <div class="field"><label for="liPass">Password</label><input id="liPass" type="password" autocomplete="current-password"></div>
+        <button id="liBtn" class="btn">Sign in</button>
+        <p class="auth__alt">No account? <button id="toReg" class="link">Open one</button></p>
+      </div>
+
+      <div id="regBox" class="hidden">
+        <div class="field"><label for="rgName">Name</label><input id="rgName" type="text" autocomplete="name"></div>
+        <div class="field"><label for="rgEmail">Email</label><input id="rgEmail" type="email" autocomplete="email"></div>
+        <div class="field"><label for="rgPass">Password</label><input id="rgPass" type="password" autocomplete="new-password"></div>
+        <div class="field"><label for="rgConfirm">Confirm password</label><input id="rgConfirm" type="password" autocomplete="new-password"></div>
+        <button id="rgBtn" class="btn">Create account</button>
+        <p class="auth__alt">Already trading? <button id="toLogin" class="link">Sign in</button></p>
+      </div>
+
+      <div id="authMsg" class="msg"></div>
+    </div>
+  </section>
+
+  <!-- ============ Cockpit ============ -->
+  <main id="cockpit" class="wrap hidden">
+    <div class="topbar">
+      <div class="brand"><span class="logomark">I</span> Investment <span class="tag">PRO</span></div>
+      <div class="topbar__spacer"></div>
+      <nav class="switcher" aria-label="Choose experience">
+        <a href="{{ url('/') }}" data-switch>Playground</a>
+        <a href="{{ url('/pro') }}" class="is-active" aria-current="page">Pro</a>
+      </nav>
+      <button id="proLogout" class="logout">Sign out</button>
+    </div>
+
+    <section class="kpis" aria-label="Account summary">
+      <div class="kpi"><div class="kpi__label">Equity</div><div class="kpi__value" id="kpiEquity">$0.00</div><div class="kpi__sub eyebrow" id="acctName">—</div></div>
+      <div class="kpi"><div class="kpi__label">Buying Power</div><div class="kpi__value" id="kpiBuyingPower">$0.00</div><div class="kpi__sub" style="color:var(--faint)">cash available</div></div>
+      <div class="kpi"><div class="kpi__label">Invested</div><div class="kpi__value" id="kpiInvested">$0.00</div><div class="kpi__sub" style="color:var(--faint)">at cost</div></div>
+      <div class="kpi"><div class="kpi__label">Total P/L</div><div class="kpi__value num" id="kpiPL">$0.00</div><div class="kpi__sub num" id="kpiPLpct">0.00%</div></div>
+    </section>
+
+    <div class="cols">
+      <!-- Left: positions + market -->
+      <div class="stack">
+        <div class="card">
+          <div class="card__head"><h3>Positions</h3><span class="eyebrow" id="positionsCount">0 holdings</span></div>
+          <div class="card__body">
+            <table>
+              <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>P/L</th></tr></thead>
+              <tbody id="positionsBody"></tbody>
+            </table>
+            <p class="empty hidden" id="positionsEmpty">No open positions. Place your first order.</p>
           </div>
         </div>
-      </div>
 
-      <div style="margin-top:12px" class="balance card">
-        <div>
-          <div class="amount" id="userBalance">$0</div>
-          <div class="tag">Protected & Trackable</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;color:var(--muted)">Account status</div>
-          <div style="font-weight:700;margin-top:6px">Active</div>
+        <div class="card">
+          <div class="card__head"><h3>Market</h3><span class="eyebrow">tap to trade</span></div>
+          <div class="card__body" id="watchlist"></div>
         </div>
       </div>
 
-      <div class="action-row" aria-hidden="false">
-        <div class="tile in card" data-action="put-in" tabindex="0" role="button" aria-pressed="false">
-          <div class="label">Put Money In</div>
-          <div class="desc">Quickly add funds to an investment</div>
-        </div>
-        <div class="tile out card" data-action="take-out" tabindex="0" role="button" aria-pressed="false">
-          <div class="label">Take Money Out</div>
-          <div class="desc">Withdraw money back to your bank</div>
-        </div>
-      </div>
+      <!-- Right: order ticket + leaderboard -->
+      <div class="stack">
+        <div class="card sticky" aria-label="Order ticket">
+          <div class="card__head"><h3>Order Ticket</h3></div>
+          <div class="ticket__sym"><b id="otSymbol">—</b><span class="last num" id="otLast">$0.00</span></div>
+          <div class="ticket__name" id="otName">Select a symbol from the market</div>
 
-    </header>
-
-    <!-- Wizard area -->
-    <section id="wizard-area" class="card wizard hidden" aria-live="polite">
-      <!-- Steps are hidden/shown by JS -->
-      <div id="step-1" class="step active" data-step="1">
-        <h2>Step 1 — Choose Amount</h2>
-        <p>Tap a quick amount or type your own.</p>
-        <div class="amount-input">
-          <input id="amount" class="numeric" type="number" min="1" value="100" aria-label="Amount to invest" />
-          <div class="chips" role="list">
-            <button class="chip" data-value="100">100</button>
-            <button class="chip" data-value="300">300</button>
-            <button class="chip" data-value="500">500</button>
-            <button class="chip" data-value="1000">1000</button>
+          <div class="side" role="tablist" aria-label="Order side">
+            <button data-side="buy" class="on" id="sideBuy">Buy</button>
+            <button data-side="sell" id="sideSell">Sell</button>
           </div>
+
+          <div class="ticket__field">
+            <label for="otQty">Quantity (shares)</label>
+            <input id="otQty" type="number" min="1" value="1" inputmode="numeric">
+          </div>
+
+          <div class="ticket__est"><span class="k" id="otEstLabel">Est. cost</span><span class="v num" id="otEst">$0.00</span></div>
+          <div class="ticket__hint" id="otHint"></div>
+
+          <div class="ticket__submit"><button id="otSubmit" class="buy">Buy —</button></div>
+        </div>
+
+        <div class="card">
+          <div class="card__head"><h3>Leaderboard</h3><span class="eyebrow">by level</span></div>
+          <div class="card__body" id="leaderboardBody"></div>
         </div>
       </div>
-
-      <div id="step-2" class="step" data-step="2">
-        <h2>Step 2 — Choose Stock</h2>
-        <p>Pick a stock with a single tap.</p>
-        <div id="stock-list-wizard">
-          <!-- Stocks will be loaded here -->
-        </div>
-      </div>
-
-      <div id="step-3" class="step" data-step="3">
-        <h2>Step 3 — Confirm</h2>
-        <div class="card" style="padding:14px">
-          <div style="font-size:18px;font-weight:700">Summary</div>
-          <p id="confirm-summary">You are investing <strong>$100</strong> into <strong>Stock</strong>.</p>
-        </div>
-        <p style="margin-top:12px">If everything looks correct, press Confirm. You can cancel anytime.</p>
-      </div>
-
-      <div class="fixed-action">
-        <button class="btn btn-ghost" id="btn-back" style="display:none">Back</button>
-        <button class="btn btn-primary" id="btn-next">Continue</button>
-      </div>
-    </section>
-
-    <!-- Activities -->
-    <section class="card" aria-label="Activities" style="margin-top:16px">
-      <h2>Latest Activity</h2>
-      <div id="activities-list">
-        <p class="text-gray-500 text-sm">No recent activity</p>
-      </div>
-    </section>
-
-    <!-- Help -->
-    <section class="card" aria-label="Help" style="margin-top:16px">
-      <h2>Help</h2>
-      <p>If you need help, choose an option below.</p>
-      <div class="help-grid">
-        <button class="help-btn" id="call-support">Call Support</button>
-        <button class="help-btn" id="chat-support">Chat With Us</button>
-      </div>
-      <div style="margin-top:12px">
-        <details>
-          <summary style="font-size:18px;font-weight:700;cursor:pointer">How do I invest?</summary>
-          <p style="font-size:16px">Tap "Put Money In" on the main screen, choose an amount, select a stock, and confirm.</p>
-        </details>
-        <details style="margin-top:8px">
-          <summary style="font-size:18px;font-weight:700;cursor:pointer">How do I withdraw funds?</summary>
-          <p style="font-size:16px">Tap "Take Money Out" on the main screen, choose an amount and confirm withdrawal.</p>
-        </details>
-      </div>
-    </section>
-
-    <!-- Bottom navigation -->
-    <nav class="bottom-nav" aria-label="Primary">
-      <div class="nav-item active" data-tab="home" role="button" tabindex="0">Home</div>
-      <div class="nav-item" data-tab="activities" role="button" tabindex="0">Activities</div>
-      <div class="nav-item" data-tab="help" role="button" tabindex="0">Help</div>
-      <div class="nav-item" id="logout-btn" role="button" tabindex="0">Logout</div>
-    </nav>
-
+    </div>
   </main>
 
   <script src="{{ asset('js/services/InvestmentApi.js') }}"></script>
