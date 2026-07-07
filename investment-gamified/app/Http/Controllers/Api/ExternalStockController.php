@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\External\StockSymbolRequest;
 use App\Models\Stock;
 use App\Services\ExternalStockProvider;
 use App\Services\FinancialModelingPrepService;
@@ -14,25 +15,28 @@ use Illuminate\Http\Request;
 
 class ExternalStockController extends Controller
 {
+    private const MIN_HISTORY_DAYS = 1;
+
+    private const MAX_HISTORY_DAYS = 365;
+
+    private const MIN_QUERY_LENGTH = 1;
+
+    private const MAX_QUERY_LENGTH = 50;
+
     public function __construct(
         private readonly StockApiService $alphaService,
         private readonly FinancialModelingPrepService $fmpService,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/external/stocks/quote/{symbol}?source=alphavantage|fmp
      */
-    public function quote(Request $request, string $symbol): JsonResponse
+    public function quote(StockSymbolRequest $request): JsonResponse
     {
-        $symbol = strtoupper(trim($symbol));
+        $symbol = $request->symbol();
 
-        if (!preg_match('/^[A-Z0-9.\-]{1,8}$/', $symbol)) {
-            return response()->json(['success' => false, 'message' => 'Invalid stock symbol format'], 422);
-        }
-
-        if (!Stock::where('symbol', $symbol)->exists()) {
-            return response()->json(['success' => false, 'message' => 'Symbol not available for trading'], 404);
+        if ($notFound = $this->ensureSymbolExists($symbol)) {
+            return $notFound;
         }
 
         try {
@@ -47,9 +51,15 @@ class ExternalStockController extends Controller
     /**
      * GET /api/external/stocks/history/{symbol}?source=alphavantage|fmp&days=30
      */
-    public function history(Request $request, string $symbol): JsonResponse
+    public function history(StockSymbolRequest $request): JsonResponse
     {
-        $days = (int) $request->query('days', 30);
+        $symbol = $request->symbol();
+
+        if ($notFound = $this->ensureSymbolExists($symbol)) {
+            return $notFound;
+        }
+
+        $days = $this->normalizeDays($request->query('days', 30));
 
         try {
             $data = $this->resolveProvider($request)->getHistoricalPrices($symbol, $days);
@@ -65,9 +75,17 @@ class ExternalStockController extends Controller
      */
     public function search(Request $request): JsonResponse
     {
-        $query = $request->query('q');
-        if (!$query) {
+        $query = trim((string) $request->query('q', ''));
+
+        if ($query === '') {
             return response()->json(['success' => false, 'message' => 'Query parameter "q" is required'], 422);
+        }
+
+        if (mb_strlen($query) < self::MIN_QUERY_LENGTH || mb_strlen($query) > self::MAX_QUERY_LENGTH) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Query parameter "q" must be between '.self::MIN_QUERY_LENGTH.' and '.self::MAX_QUERY_LENGTH.' characters',
+            ], 422);
         }
 
         try {
@@ -82,8 +100,14 @@ class ExternalStockController extends Controller
     /**
      * GET /api/external/stocks/profile/{symbol}   (FMP only)
      */
-    public function profile(string $symbol): JsonResponse
+    public function profile(StockSymbolRequest $request): JsonResponse
     {
+        $symbol = $request->symbol();
+
+        if ($notFound = $this->ensureSymbolExists($symbol)) {
+            return $notFound;
+        }
+
         try {
             $data = $this->fmpService->getCompanyProfile($symbol);
         } catch (\Exception $e) {
@@ -91,6 +115,26 @@ class ExternalStockController extends Controller
         }
 
         return $this->providerDataResponse($data, 'No profile data available');
+    }
+
+    /**
+     * Guards the route-parameter symbols against values that pass format
+     * validation but aren't tradable locally.
+     */
+    private function ensureSymbolExists(string $symbol): ?JsonResponse
+    {
+        if (! Stock::where('symbol', $symbol)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Symbol not available for trading'], 404);
+        }
+
+        return null;
+    }
+
+    private function normalizeDays(mixed $days): int
+    {
+        $days = filter_var($days, FILTER_VALIDATE_INT) ?: self::MIN_HISTORY_DAYS;
+
+        return max(self::MIN_HISTORY_DAYS, min(self::MAX_HISTORY_DAYS, $days));
     }
 
     private function resolveProvider(Request $request): ExternalStockProvider
@@ -104,13 +148,13 @@ class ExternalStockController extends Controller
     {
         return response()->json([
             'success' => false,
-            'message' => 'External API error: ' . $error,
+            'message' => 'External API error: '.$error,
         ], 503);
     }
 
     private function providerDataResponse(?array $data, string $emptyMessage): JsonResponse
     {
-        if (!$data) {
+        if (! $data) {
             return response()->json(['success' => false, 'message' => $emptyMessage], 502);
         }
 

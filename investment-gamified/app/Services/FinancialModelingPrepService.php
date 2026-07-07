@@ -7,22 +7,28 @@ namespace App\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Services\CircuitBreaker;
-use App\Services\ApiQuotaTracker;
 
 class FinancialModelingPrepService implements ExternalStockProvider
 {
     private const BASE_URL = 'https://financialmodelingprep.com/api/v3';
 
-    private string $apiKey;
+    private const MIN_HISTORY_DAYS = 1;
+
+    private const MAX_HISTORY_DAYS = 365;
+
+    private const LOG_BODY_TRUNCATE_LENGTH = 200;
+
+    private ?string $apiKey;
+
     private CircuitBreaker $circuit;
+
     private ApiQuotaTracker $quota;
 
     public function __construct()
     {
-        $this->apiKey  = config('services.fmp.key');
+        $this->apiKey = config('services.fmp.key');
         $this->circuit = new CircuitBreaker('fmp');
-        $this->quota   = new ApiQuotaTracker();
+        $this->quota = new ApiQuotaTracker;
     }
 
     public function getQuote(string $symbol): ?array
@@ -35,27 +41,37 @@ class FinancialModelingPrepService implements ExternalStockProvider
         return $this->circuit->call(function () use ($symbol, $cacheKey) {
             if (! $this->quota->hasQuota('fmp')) {
                 Log::warning('FMP quota exhausted, returning stale cache if available');
+
                 return Cache::get($cacheKey);
             }
 
             $this->quota->recordRequest('fmp');
 
             return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($symbol) {
-                $response = Http::timeout(10)->get(self::BASE_URL . "/quote/{$symbol}", [
-                    'apikey' => $this->apiKey,
-                ]);
+                try {
+                    $response = Http::timeout(10)->get(self::BASE_URL.'/quote/'.rawurlencode($symbol), [
+                        'apikey' => $this->apiKey,
+                    ]);
+                } catch (\Throwable $e) {
+                    // Re-thrown as a sanitized exception: the underlying
+                    // HTTP client exception can embed the full request URL
+                    // (including the apikey query param), and that message
+                    // would otherwise bubble up into CircuitBreaker's logger.
+                    Log::error("FMP request failed for quote {$symbol}: ".$this->sanitizeErrorMessage($e));
+                    throw new \RuntimeException('FMP request failed');
+                }
 
-                Log::info("FMP Quote response for {$symbol}: " . $response->body());
+                $this->logResponse('Quote', $symbol, $response->body());
 
                 if ($response->successful()) {
                     $data = $response->json();
 
                     if (isset($data['Error Message'])) {
-                        Log::error("FMP API Error for {$symbol}: " . $data['Error Message']);
+                        Log::error("FMP API Error for {$symbol}: ".$data['Error Message']);
                         throw new \Exception('FMP API error');
                     }
 
-                    if (!empty($data) && isset($data[0])) {
+                    if (! empty($data) && isset($data[0])) {
                         $quote = $data[0];
 
                         return [
@@ -81,11 +97,11 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($symbol): ?array {
             try {
-                $response = Http::timeout(10)->get(self::BASE_URL . "/profile/{$symbol}", [
+                $response = Http::timeout(10)->get(self::BASE_URL.'/profile/'.rawurlencode($symbol), [
                     'apikey' => $this->apiKey,
                 ]);
 
-                Log::info("FMP Profile response for {$symbol}: " . $response->body());
+                $this->logResponse('Profile', $symbol, $response->body());
 
                 if ($response->successful()) {
                     $data = $response->json();
@@ -94,14 +110,14 @@ class FinancialModelingPrepService implements ExternalStockProvider
                         return null;
                     }
 
-                    if (!empty($data) && isset($data[0])) {
+                    if (! empty($data) && isset($data[0])) {
                         return $data[0];
                     }
                 }
 
                 return null;
             } catch (\Exception $e) {
-                Log::error("FMP ERROR (profile {$symbol}): " . $e->getMessage());
+                Log::error("FMP ERROR (profile {$symbol}): ".$this->sanitizeErrorMessage($e));
 
                 return null;
             }
@@ -110,6 +126,7 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
     public function getHistoricalPrices(string $symbol, int $days = 30): ?array
     {
+        $days = max(self::MIN_HISTORY_DAYS, min(self::MAX_HISTORY_DAYS, $days));
         $cacheKey = "fmp_history_{$symbol}_{$days}";
 
         return Cache::remember($cacheKey, now()->addHours(24), function () use ($symbol, $days): ?array {
@@ -117,13 +134,13 @@ class FinancialModelingPrepService implements ExternalStockProvider
                 $from = now()->subDays($days)->format('Y-m-d');
                 $to = now()->format('Y-m-d');
 
-                $response = Http::timeout(10)->get(self::BASE_URL . "/historical-price-full/{$symbol}", [
+                $response = Http::timeout(10)->get(self::BASE_URL.'/historical-price-full/'.rawurlencode($symbol), [
                     'from' => $from,
                     'to' => $to,
                     'apikey' => $this->apiKey,
                 ]);
 
-                Log::info("FMP History response for {$symbol}: " . $response->body());
+                $this->logResponse('History', $symbol, $response->body());
 
                 if ($response->successful()) {
                     $data = $response->json();
@@ -139,7 +156,7 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
                 return null;
             } catch (\Exception $e) {
-                Log::error("FMP ERROR (history {$symbol}): " . $e->getMessage());
+                Log::error("FMP ERROR (history {$symbol}): ".$this->sanitizeErrorMessage($e));
 
                 return null;
             }
@@ -148,31 +165,35 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
     public function searchStocks(string $query): ?array
     {
-        try {
-            $response = Http::timeout(10)->get(self::BASE_URL . '/search', [
-                'query' => $query,
-                'limit' => 10,
-                'apikey' => $this->apiKey,
-            ]);
+        $cacheKey = 'fmp_search_'.md5($query);
 
-            Log::info("FMP Search response for {$query}: " . $response->body());
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($query): ?array {
+            try {
+                $response = Http::timeout(10)->get(self::BASE_URL.'/search', [
+                    'query' => $query,
+                    'limit' => 10,
+                    'apikey' => $this->apiKey,
+                ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+                $this->logResponse('Search', $query, $response->body());
 
-                if ($this->hasApiError($data, "search {$query}")) {
-                    return null;
+                if ($response->successful()) {
+                    $data = $response->json();
+
+                    if ($this->hasApiError($data, "search {$query}")) {
+                        return null;
+                    }
+
+                    return $data;
                 }
 
-                return $data;
+                return null;
+            } catch (\Exception $e) {
+                Log::error("FMP ERROR (search {$query}): ".$this->sanitizeErrorMessage($e));
+
+                return null;
             }
-
-            return null;
-        } catch (\Exception $e) {
-            Log::error("FMP ERROR (search {$query}): " . $e->getMessage());
-
-            return null;
-        }
+        });
     }
 
     public function getTradableStocks(): ?array
@@ -181,11 +202,11 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
         return Cache::remember($cacheKey, now()->addDays(30), function (): ?array {
             try {
-                $response = Http::get(self::BASE_URL . '/stock/list', [
+                $response = Http::get(self::BASE_URL.'/stock/list', [
                     'apikey' => $this->apiKey,
                 ]);
 
-                Log::info('FMP Tradable Stocks response: ' . substr($response->body(), 0, 500) . '...');
+                $this->logResponse('Tradable Stocks', '(all)', $response->body());
 
                 if ($response->successful()) {
                     return $response->json();
@@ -193,7 +214,7 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
                 return null;
             } catch (\Exception $e) {
-                Log::error('FMP ERROR (tradable stocks): ' . $e->getMessage());
+                Log::error('FMP ERROR (tradable stocks): '.$this->sanitizeErrorMessage($e));
 
                 return null;
             }
@@ -202,12 +223,34 @@ class FinancialModelingPrepService implements ExternalStockProvider
 
     private function hasApiError(array $data, string $context): bool
     {
-        if (!isset($data['Error Message'])) {
+        if (! isset($data['Error Message'])) {
             return false;
         }
 
-        Log::error('FMP API Error for ' . $context . ': ' . $data['Error Message']);
+        Log::error('FMP API Error for '.$context.': '.$data['Error Message']);
 
         return true;
+    }
+
+    /**
+     * Debug-level, truncated response logging. Never logs at info level and
+     * never includes the request (which carries the apikey) - only the
+     * response body, truncated, is recorded.
+     */
+    private function logResponse(string $label, string $context, string $body): void
+    {
+        Log::debug("FMP {$label} response for {$context}: ".substr($body, 0, self::LOG_BODY_TRUNCATE_LENGTH));
+    }
+
+    /**
+     * HTTP client exceptions (timeouts, DNS failures, etc.) can embed the
+     * full request URI - including the `apikey` query parameter - in their
+     * message. Strip it before the message is ever logged.
+     */
+    private function sanitizeErrorMessage(\Throwable $e): string
+    {
+        $message = preg_replace('/apikey=[^&\s]+/i', 'apikey=***', $e->getMessage());
+
+        return $message ?? 'request failed';
     }
 }

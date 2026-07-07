@@ -13,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
+        // Route-assignable alias for per-user request idempotency on state-changing trades.
+        $middleware->alias([
+            'idempotent' => \App\Http\Middleware\EnsureIdempotentRequest::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

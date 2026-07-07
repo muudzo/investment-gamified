@@ -2,10 +2,11 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\Stock;
 use App\Models\Portfolio;
+use App\Models\Stock;
+use App\Models\User;
+use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
 
 class DivisionByZeroTest extends TestCase
 {
@@ -21,7 +22,9 @@ class DivisionByZeroTest extends TestCase
             'average_price' => 0,
         ]);
 
-        $response = $this->actingAs($user, 'api')->getJson('/api/portfolio');
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/portfolio');
         $response->assertStatus(200);
         $data = $response->json('data')[0] ?? null;
         $this->assertNotNull($data);

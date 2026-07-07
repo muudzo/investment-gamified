@@ -43,11 +43,16 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
+
+        // Token hygiene: prune any previously issued 'auth-token' tokens for
+        // this user before issuing a new one, so stale tokens don't
+        // accumulate in personal_access_tokens.
+        $user->tokens()->where('name', 'auth-token')->delete();
 
         $token = $user->createToken('auth-token')->plainTextToken;
 

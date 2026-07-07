@@ -1,6 +1,10 @@
 // Initialize API
 const api = new InvestmentApi(document.querySelector('meta[name="app-url"]').content + '/api');
 let currentStock = null;
+// In-memory cache of the last stocks fetch. The wizard rows reference this
+// array by index (data-idx) instead of ever writing untrusted stock JSON
+// into a DOM attribute.
+let stocksCache = [];
 const root = document.documentElement;
 
 // Toggle senior mode: enlarge text and touch targets
@@ -117,6 +121,54 @@ async function loadUserData() {
     }
 }
 
+// Build a single wizard stock row as real DOM nodes. Every dynamic field
+// (symbol, name, price, change_percentage) is set via textContent only, and
+// the row is linked back to the in-memory stocksCache array by index
+// (data-idx) instead of embedding JSON.stringify(stock) in an attribute,
+// which used to let a single quote in any stock field break out of the
+// attribute and inject markup/script.
+function createStockRow(stock, idx) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.dataset.idx = String(idx);
+
+    const metaWrap = document.createElement('div');
+    metaWrap.style.flex = '1';
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'meta';
+    metaEl.textContent = `${stock.symbol} - ${stock.name}`;
+
+    const subEl = document.createElement('div');
+    subEl.className = 'sub';
+    subEl.textContent = `$${stock.current_price} per share`;
+
+    metaWrap.appendChild(metaEl);
+    metaWrap.appendChild(subEl);
+
+    const isPositive = stock.change_percentage >= 0;
+    const changeEl = document.createElement('div');
+    changeEl.style.fontWeight = '700';
+    changeEl.style.color = isPositive ? 'green' : 'red';
+    changeEl.textContent = `${isPositive ? '+' : ''}${stock.change_percentage}%`;
+
+    row.appendChild(metaWrap);
+    row.appendChild(changeEl);
+
+    row.addEventListener('click', () => {
+        const i = parseInt(row.dataset.idx, 10);
+        currentStock = stocksCache[i];
+        // visually indicate selection
+        document.querySelectorAll('#stock-list-wizard .row').forEach(x => x.style.outline = 'none');
+        row.style.outline = '3px solid rgba(11,109,58,0.12)';
+        announce(currentStock.symbol + ' selected');
+    });
+
+    return row;
+}
+
 // Load stocks for wizard
 async function loadStocksForWizard() {
     const data = await api.getStocks();
@@ -126,29 +178,35 @@ async function loadStocksForWizard() {
         return;
     }
 
-    const stockList = document.getElementById('stock-list-wizard');
-    stockList.innerHTML = data.data.map(stock => `
-    <div class="row" role="button" tabindex="0" data-stock='${JSON.stringify(stock)}'>
-      <div style="flex:1">
-        <div class="meta">${stock.symbol} - ${stock.name}</div>
-        <div class="sub">$${stock.current_price} per share</div>
-      </div>
-      <div style="font-weight:700;color:${stock.change_percentage >= 0 ? 'green' : 'red'}">
-        ${stock.change_percentage >= 0 ? '+' : ''}${stock.change_percentage}%
-      </div>
-    </div>
-  `).join('');
+    stocksCache = data.data;
 
-    // Add click handlers
-    document.querySelectorAll('#stock-list-wizard .row').forEach(r => {
-        r.addEventListener('click', (ev) => {
-            currentStock = JSON.parse(r.dataset.stock);
-            // visually indicate selection
-            document.querySelectorAll('#stock-list-wizard .row').forEach(x => x.style.outline = 'none');
-            r.style.outline = '3px solid rgba(11,109,58,0.12)';
-            announce(currentStock.symbol + ' selected');
-        });
+    const stockList = document.getElementById('stock-list-wizard');
+    stockList.textContent = '';
+
+    stocksCache.forEach((stock, idx) => {
+        stockList.appendChild(createStockRow(stock, idx));
     });
+}
+
+// Render the confirm-step summary using DOM nodes so the stock symbol
+// (untrusted, third-party data) can never be interpreted as markup.
+function renderConfirmSummary(amount, stock, quantity) {
+    const container = document.getElementById('confirm-summary');
+    container.textContent = '';
+
+    container.appendChild(document.createTextNode('You are investing '));
+
+    const amountEl = document.createElement('strong');
+    amountEl.textContent = `$${amount}`;
+    container.appendChild(amountEl);
+
+    container.appendChild(document.createTextNode(' into '));
+
+    const symbolEl = document.createElement('strong');
+    symbolEl.textContent = stock.symbol;
+    container.appendChild(symbolEl);
+
+    container.appendChild(document.createTextNode(` (${quantity} shares at $${stock.current_price} each).`));
 }
 
 // Confirm investment
@@ -169,8 +227,7 @@ async function confirmInvestment() {
     }
 
     // Update summary
-    document.getElementById('confirm-summary').innerHTML =
-        `You are investing <strong>$${amount}</strong> into <strong>${currentStock.symbol}</strong> (${quantity} shares at $${currentStock.current_price} each).`;
+    renderConfirmSummary(amount, currentStock, quantity);
 
     const data = await api.buyStock(currentStock.symbol, quantity);
 
@@ -182,22 +239,67 @@ async function confirmInvestment() {
     }
 }
 
+// Rebuild the success screen using DOM nodes. `symbol` originates from the
+// stocks API and is only ever assigned via textContent here.
 function showSuccess(amount, symbol, quantity) {
     const area = document.getElementById('wizard-area');
-    area.innerHTML = `
-    <div class="card">
-      <h2>Success! 🎉</h2>
-      <p style="font-size:18px">You invested <strong>$${amount}</strong> into <strong>${symbol}</strong> (${quantity} shares).</p>
-      <p style="color:var(--muted)">Your investment is protected & trackable.</p>
-      <div style="margin-top:12px">
-        <button class="btn btn-primary" id="done">Done</button>
-      </div>
-    </div>
-  `;
-    document.getElementById('done').addEventListener('click', () => {
+    area.textContent = '';
+
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const heading = document.createElement('h2');
+    heading.textContent = 'Success! \u{1F389}';
+    card.appendChild(heading);
+
+    const summary = document.createElement('p');
+    summary.style.fontSize = '18px';
+    summary.appendChild(document.createTextNode('You invested '));
+
+    const amountEl = document.createElement('strong');
+    amountEl.textContent = `$${amount}`;
+    summary.appendChild(amountEl);
+
+    summary.appendChild(document.createTextNode(' into '));
+
+    const symbolEl = document.createElement('strong');
+    symbolEl.textContent = symbol;
+    summary.appendChild(symbolEl);
+
+    summary.appendChild(document.createTextNode(` (${quantity} shares).`));
+    card.appendChild(summary);
+
+    const protectedText = document.createElement('p');
+    protectedText.style.color = 'var(--muted)';
+    protectedText.textContent = 'Your investment is protected & trackable.';
+    card.appendChild(protectedText);
+
+    const actionsWrap = document.createElement('div');
+    actionsWrap.style.marginTop = '12px';
+
+    const doneBtn = document.createElement('button');
+    doneBtn.className = 'btn btn-primary';
+    doneBtn.id = 'done';
+    doneBtn.textContent = 'Done';
+    actionsWrap.appendChild(doneBtn);
+    card.appendChild(actionsWrap);
+
+    area.appendChild(card);
+
+    doneBtn.addEventListener('click', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
         area.classList.add('hidden');
-        area.innerHTML = `
+        resetWizardArea(area);
+        initWizard();
+    });
+}
+
+// Restore the original wizard markup after a successful investment. This
+// block is 100% static markup with no interpolated/dynamic values (it
+// mirrors the initial #wizard-area markup in senior.blade.php), so it is
+// not an XSS surface even though it is assigned via innerHTML.
+function resetWizardArea(area) {
+    area.innerHTML = `
       <div id="step-1" class="step active" data-step="1">
         <h2>Step 1 — Choose Amount</h2>
         <p>Tap a quick amount or type your own.</p>
@@ -229,9 +331,6 @@ function showSuccess(amount, symbol, quantity) {
         <button class="btn btn-primary" id="btn-next">Continue</button>
       </div>
     `;
-        // Re-initialize wizard
-        initWizard();
-    });
 }
 
 function logout() {

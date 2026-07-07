@@ -89,11 +89,6 @@ function hideMessages() {
     document.getElementById('authSuccess').classList.add('hidden');
 }
 
-function hideMessages() {
-    document.getElementById('authError').classList.add('hidden');
-    document.getElementById('authSuccess').classList.add('hidden');
-}
-
 function logout() {
     api.clearToken();
     document.getElementById('loginScreen').classList.remove('hidden');
@@ -134,67 +129,183 @@ async function loadUserData() {
     }
 }
 
+// Build a single stock card as real DOM nodes so that any attacker-controlled
+// field coming back from the stocks API (name, description, fun_fact, etc.)
+// is only ever assigned via textContent and can never be parsed as markup.
+function createStockCard(stock) {
+    const card = document.createElement('div');
+    card.className = 'border rounded-xl p-4 hover:shadow-md transition';
+
+    const header = document.createElement('div');
+    header.className = 'flex justify-between items-start mb-2';
+
+    const left = document.createElement('div');
+    const symbolEl = document.createElement('h4');
+    symbolEl.className = 'font-bold text-lg';
+    symbolEl.textContent = stock.symbol;
+
+    const nameEl = document.createElement('p');
+    nameEl.className = 'text-sm text-gray-600';
+    nameEl.textContent = stock.name;
+
+    left.appendChild(symbolEl);
+    left.appendChild(nameEl);
+
+    const right = document.createElement('div');
+    right.className = 'text-right';
+
+    const priceEl = document.createElement('p');
+    priceEl.className = 'font-bold text-xl';
+    priceEl.textContent = `$${stock.current_price}`;
+
+    const isPositive = stock.change_percentage >= 0;
+    const changeEl = document.createElement('p');
+    changeEl.className = `text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`;
+    changeEl.textContent = `${isPositive ? '+' : ''}${stock.change_percentage}%`;
+
+    right.appendChild(priceEl);
+    right.appendChild(changeEl);
+
+    header.appendChild(left);
+    header.appendChild(right);
+    card.appendChild(header);
+
+    const descEl = document.createElement('p');
+    descEl.className = 'text-sm text-gray-600 mb-3';
+    descEl.textContent = stock.kid_friendly_description || stock.description || '';
+    card.appendChild(descEl);
+
+    if (stock.fun_fact) {
+        const funFactEl = document.createElement('p');
+        funFactEl.className = 'text-xs text-purple-600 mb-3';
+        funFactEl.textContent = `💡 ${stock.fun_fact}`;
+        card.appendChild(funFactEl);
+    }
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'flex gap-2';
+
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 font-semibold';
+    buyBtn.textContent = 'Buy';
+    buyBtn.addEventListener('click', () => openTradeModal(stock.symbol, 'buy'));
+
+    const sellBtn = document.createElement('button');
+    sellBtn.className = 'flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 font-semibold';
+    sellBtn.textContent = 'Sell';
+    sellBtn.addEventListener('click', () => openTradeModal(stock.symbol, 'sell'));
+
+    btnRow.appendChild(buyBtn);
+    btnRow.appendChild(sellBtn);
+    card.appendChild(btnRow);
+
+    return card;
+}
+
 async function loadStocks() {
     const data = await api.getStocks();
+    const stocksList = document.getElementById('stocksList');
+
+    // Clear previous content without ever touching innerHTML
+    stocksList.textContent = '';
 
     if (!data.success) {
         console.error('Failed to load stocks:', data.message);
-        document.getElementById('stocksList').innerHTML = '<p class="text-red-500">Failed to load stocks. Please refresh.</p>';
+        const errEl = document.createElement('p');
+        errEl.className = 'text-red-500';
+        errEl.textContent = 'Failed to load stocks. Please refresh.';
+        stocksList.appendChild(errEl);
         return;
     }
 
-    const stocksList = document.getElementById('stocksList');
-    stocksList.innerHTML = data.data.map(stock => `
-        <div class="border rounded-xl p-4 hover:shadow-md transition">
-            <div class="flex justify-between items-start mb-2">
-                <div>
-                    <h4 class="font-bold text-lg">${stock.symbol}</h4>
-                    <p class="text-sm text-gray-600">${stock.name}</p>
-                </div>
-                <div class="text-right">
-                    <p class="font-bold text-xl">$${stock.current_price}</p>
-                    <p class="text-sm ${stock.change_percentage >= 0 ? 'text-green-600' : 'text-red-600'}">
-                        ${stock.change_percentage >= 0 ? '+' : ''}${stock.change_percentage}%
-                    </p>
-                </div>
-            </div>
-            <p class="text-sm text-gray-600 mb-3">${stock.kid_friendly_description || stock.description || ''}</p>
-            ${stock.fun_fact ? `<p class="text-xs text-purple-600 mb-3">💡 ${stock.fun_fact}</p>` : ''}
-            <div class="flex gap-2">
-                <button onclick="openTradeModal('${stock.symbol}', 'buy')" 
-                        class="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 font-semibold">
-                    Buy
-                </button>
-                <button onclick="openTradeModal('${stock.symbol}', 'sell')" 
-                        class="flex-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 font-semibold">
-                    Sell
-                </button>
-            </div>
-        </div>
-    `).join('');
+    data.data.forEach(stock => {
+        stocksList.appendChild(createStockCard(stock));
+    });
+}
+
+function createPortfolioItem(item) {
+    const wrap = document.createElement('div');
+    wrap.className = 'border rounded-lg p-3';
+
+    const row = document.createElement('div');
+    row.className = 'flex justify-between items-center';
+
+    const left = document.createElement('div');
+    const symbolEl = document.createElement('p');
+    symbolEl.className = 'font-semibold';
+    symbolEl.textContent = item.stock_symbol;
+
+    const qtyEl = document.createElement('p');
+    qtyEl.className = 'text-xs text-gray-600';
+    qtyEl.textContent = `${item.quantity} shares`;
+
+    left.appendChild(symbolEl);
+    left.appendChild(qtyEl);
+
+    const isPositive = item.profit_loss >= 0;
+    const plEl = document.createElement('p');
+    plEl.className = `text-sm font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`;
+    plEl.textContent = `${isPositive ? '+' : ''}$${parseFloat(item.profit_loss).toFixed(2)}`;
+
+    row.appendChild(left);
+    row.appendChild(plEl);
+    wrap.appendChild(row);
+
+    return wrap;
 }
 
 async function loadPortfolio() {
     const data = await api.getPortfolio();
-
     const portfolioList = document.getElementById('portfolioList');
+
+    portfolioList.textContent = '';
+
     if (!data.success || data.data.length === 0) {
-        portfolioList.innerHTML = '<p class="text-gray-500 text-sm">No stocks yet. Start trading!</p>';
-    } else {
-        portfolioList.innerHTML = data.data.map(item => `
-            <div class="border rounded-lg p-3">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="font-semibold">${item.stock_symbol}</p>
-                        <p class="text-xs text-gray-600">${item.quantity} shares</p>
-                    </div>
-                    <p class="text-sm font-bold ${item.profit_loss >= 0 ? 'text-green-600' : 'text-red-600'}">
-                        ${item.profit_loss >= 0 ? '+' : ''}$${parseFloat(item.profit_loss).toFixed(2)}
-                    </p>
-                </div>
-            </div>
-        `).join('');
+        const emptyEl = document.createElement('p');
+        emptyEl.className = 'text-gray-500 text-sm';
+        emptyEl.textContent = 'No stocks yet. Start trading!';
+        portfolioList.appendChild(emptyEl);
+        return;
     }
+
+    data.data.forEach(item => {
+        portfolioList.appendChild(createPortfolioItem(item));
+    });
+}
+
+function createAchievementItem(achievement) {
+    const wrap = document.createElement('div');
+    wrap.className = `flex items-center gap-3 p-2 rounded-lg ${achievement.unlocked ? 'bg-yellow-50' : 'bg-gray-50'}`;
+
+    const iconEl = document.createElement('span');
+    iconEl.className = `text-2xl ${achievement.unlocked ? '' : 'grayscale opacity-50'}`;
+    iconEl.textContent = achievement.icon;
+
+    const textWrap = document.createElement('div');
+    textWrap.className = 'flex-1';
+
+    const nameEl = document.createElement('p');
+    nameEl.className = 'text-sm font-semibold';
+    nameEl.textContent = achievement.name;
+
+    const xpEl = document.createElement('p');
+    xpEl.className = 'text-xs text-gray-600';
+    xpEl.textContent = `${achievement.xp_reward} XP`;
+
+    textWrap.appendChild(nameEl);
+    textWrap.appendChild(xpEl);
+
+    wrap.appendChild(iconEl);
+    wrap.appendChild(textWrap);
+
+    if (achievement.unlocked) {
+        const checkEl = document.createElement('span');
+        checkEl.className = 'text-xs text-green-600 font-bold';
+        checkEl.textContent = '✓';
+        wrap.appendChild(checkEl);
+    }
+
+    return wrap;
 }
 
 async function loadAchievements() {
@@ -206,16 +317,11 @@ async function loadAchievements() {
     }
 
     const achievementsList = document.getElementById('achievementsList');
-    achievementsList.innerHTML = data.data.map(achievement => `
-        <div class="flex items-center gap-3 p-2 rounded-lg ${achievement.unlocked ? 'bg-yellow-50' : 'bg-gray-50'}">
-            <span class="text-2xl ${achievement.unlocked ? '' : 'grayscale opacity-50'}">${achievement.icon}</span>
-            <div class="flex-1">
-                <p class="text-sm font-semibold">${achievement.name}</p>
-                <p class="text-xs text-gray-600">${achievement.xp_reward} XP</p>
-            </div>
-            ${achievement.unlocked ? '<span class="text-xs text-green-600 font-bold">✓</span>' : ''}
-        </div>
-    `).join('');
+    achievementsList.textContent = '';
+
+    data.data.forEach(achievement => {
+        achievementsList.appendChild(createAchievementItem(achievement));
+    });
 }
 
 async function openTradeModal(symbol, type) {
@@ -267,18 +373,20 @@ function closeTradeModal() {
     document.getElementById('tradeModal').classList.add('hidden');
 }
 
+// Wire up controls that used to rely on inline onclick="" attributes in the
+// blade view. Inline event handler attributes are blocked by a strict
+// script-src CSP (no 'unsafe-inline'), so every handler is attached here
+// instead via addEventListener.
+document.getElementById('loginBtn').addEventListener('click', login);
+document.getElementById('showRegisterBtn').addEventListener('click', toggleAuthMode);
+document.getElementById('registerBtn').addEventListener('click', register);
+document.getElementById('showLoginBtn').addEventListener('click', toggleAuthMode);
+document.getElementById('logoutBtn').addEventListener('click', logout);
+document.getElementById('cancelTradeBtn').addEventListener('click', closeTradeModal);
+
 // Check for existing token on load
 window.onload = () => {
     if (api.token) {
         showDashboard();
     }
 };
-
-// Expose functions to global scope for HTML onclick handlers
-window.login = login;
-window.register = register;
-window.toggleAuthMode = toggleAuthMode;
-window.logout = logout;
-window.openTradeModal = openTradeModal;
-window.closeTradeModal = closeTradeModal;
-window.confirmTrade = confirmTrade;

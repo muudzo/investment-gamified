@@ -4,8 +4,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Kid Investment Game</title>
-	{{-- Tailwind CSS CDN - loaded synchronously to ensure styles apply immediately --}}
-	<script src="https://cdn.tailwindcss.com"></script>
+	{{-- Compiled Tailwind CSS via Vite (replaces the Tailwind CDN script so a strict CSP can be enforced) --}}
+	@vite(['resources/css/app.css'])
 	{{-- Allow JS to read the app URL for API calls --}}
 	<meta name="app-url" content="{{ url('/') }}">
 </head>
@@ -23,13 +23,13 @@
 						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
 					<input type="password" id="loginPassword" placeholder="Password" 
 						   class="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none">
-					<button onclick="login()" 
+					<button id="loginBtn"
 							class="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition">
 						Login
 					</button>
 					<p class="text-center mt-4 text-sm text-gray-600">
-						Don't have an account? 
-						<button onclick="toggleAuthMode()" class="text-purple-600 font-semibold hover:underline">
+						Don't have an account?
+						<button id="showRegisterBtn" class="text-purple-600 font-semibold hover:underline">
 							Create Account
 						</button>
 					</p>
@@ -45,13 +45,13 @@
 						   class="w-full p-3 border rounded-lg mb-3 focus:ring-2 focus:ring-purple-500 focus:outline-none">
 					<input type="password" id="registerPasswordConfirm" placeholder="Confirm Password" 
 						   class="w-full p-3 border rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none">
-					<button onclick="register()" 
+					<button id="registerBtn"
 							class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition">
 						Create Account
 					</button>
 					<p class="text-center mt-4 text-sm text-gray-600">
-						Already have an account? 
-						<button onclick="toggleAuthMode()" class="text-purple-600 font-semibold hover:underline">
+						Already have an account?
+						<button id="showLoginBtn" class="text-purple-600 font-semibold hover:underline">
 							Login
 						</button>
 					</p>
@@ -76,7 +76,7 @@
 							<a href="{{ url('/toggle-ui') }}" class="text-sm text-purple-600 hover:text-purple-700 underline">
 								Switch to Senior Mode
 							</a>
-							<button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
+							<button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">
 								Logout
 							</button>
 						</div>
@@ -150,7 +150,7 @@
 			</div>
             
 			<div class="flex gap-3">
-				<button onclick="closeTradeModal()" 
+				<button id="cancelTradeBtn"
 						class="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-semibold hover:bg-gray-300">
 					Cancel
 				</button>
